@@ -1,20 +1,31 @@
 using Xunit;
-using SolitaireSprint0;
 
 namespace SolitaireSprint0.Tests
 {
     public class UnitTest1
     {
         [Fact]
-        public void Add_2Plus3_Equals5()
+        public void NewGame_CreatesBoard_WithSomePegs()
         {
-            Assert.Equal(5, MathHelper.Add(2, 3));
+            var g = new SolitaireSprint0.SolitaireGame();
+            g.NewGame(SolitaireSprint0.BoardType.English, 7);
+
+            Assert.True(g.PegCount() > 0);
+            Assert.False(g.GameOver);
         }
 
         [Fact]
-        public void Add_0Plus0_Equals0()
+        public void InvalidMove_DoesNotChangePegCount()
         {
-            Assert.Equal(0, MathHelper.Add(0, 0));
+            var g = new SolitaireSprint0.SolitaireGame();
+            g.NewGame(SolitaireSprint0.BoardType.English, 7);
+
+            int before = g.PegCount();
+            // totally invalid (random coords likely not valid jump)
+            bool moved = g.TryApplyMove(new SolitaireSprint0.Move(0, 0, 0, 1));
+
+            Assert.False(moved);
+            Assert.Equal(before, g.PegCount());
         }
     }
 }
