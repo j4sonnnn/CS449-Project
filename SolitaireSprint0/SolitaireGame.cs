@@ -3,18 +3,17 @@ using System.Collections.Generic;
 
 namespace SolitaireSprint0
 {
+    // Game logic ONLY
     public sealed class SolitaireGame
     {
-        // Cells: null = not part of board, true = peg present, false = empty hole
+        // null = not part of board, true = peg, false = empty
         private bool?[,] _cells = new bool?[0, 0];
 
         public BoardType Type { get; private set; }
-        public int Size { get; private set; }              // Meaning depends on board type
+        public int Size { get; private set; }
         public int Rows => _cells.GetLength(0);
         public int Cols => _cells.GetLength(1);
-
-        public bool GameOver { get; private set; }
-        public bool Won { get; private set; }
+        public GameStatus Status { get; private set; } = GameStatus.InProgress;
 
         public bool? GetCell(int r, int c) => _cells[r, c];
 
@@ -27,70 +26,112 @@ namespace SolitaireSprint0
 
             _cells = type switch
             {
-                BoardType.English => BuildEnglish(size),
-                BoardType.Diamond => BuildDiamond(size),
-                BoardType.Hexagon => BuildHexagon(size),
+                BoardType.English => BuildEnglish(size),        
+                BoardType.Diamond => BuildDiamond(size),        
+                BoardType.Hexagon => BuildHexagonRadius(size),  
                 _ => throw new ArgumentOutOfRangeException(nameof(type))
             };
 
-            // Default empty: center
-            var (cr, cc) = FindCenterHole();
+        
+            var (cr, cc) = FindCenterPlayable();
             _cells[cr, cc] = false;
 
-            RecomputeGameOver();
+            RecomputeStatus();
         }
 
-        public bool TryApplyMove(Move m)
+     
+        public void SetupDemoStartWith5Pegs()
         {
-            if (GameOver) return false;
-            if (!IsInside(m.FromRow, m.FromCol) || !IsInside(m.ToRow, m.ToCol)) return false;
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                    if (_cells[r, c].HasValue)
+                        _cells[r, c] = false;
 
-            // must be peg -> empty
-            if (_cells[m.FromRow, m.FromCol] != true) return false;
-            if (_cells[m.ToRow, m.ToCol] != false) return false;
+            var (cr, cc) = FindCenterPlayable();
+            _cells[cr, cc] = false; 
 
-            // Only orthogonal jumps by 2
-            int dr = m.ToRow - m.FromRow;
-            int dc = m.ToCol - m.FromCol;
-            bool isOrthJump = (Math.Abs(dr) == 2 && dc == 0) || (Math.Abs(dc) == 2 && dr == 0);
-            if (!isOrthJump) return false;
+          
+            TryPlacePeg(cr - 2, cc);
+            TryPlacePeg(cr - 1, cc);
 
-            // middle must be peg
-            if (!IsInside(m.MidRow, m.MidCol)) return false;
-            if (_cells[m.MidRow, m.MidCol] != true) return false;
+            TryPlacePeg(cr, cc - 2);
+            TryPlacePeg(cr, cc - 1);
 
-            // Apply
-            _cells[m.FromRow, m.FromCol] = false;
-            _cells[m.MidRow, m.MidCol] = false;
-            _cells[m.ToRow, m.ToCol] = true;
+        
+            if (!TryPlacePeg(cr + 2, cc))
+            {
+                
+                PlaceFirstAvailablePeg();
+            }
 
-            RecomputeGameOver();
+            
+            EnsureExactlyNPegs(10);
+
+            RecomputeStatus();
+        }
+
+        private bool TryPlacePeg(int r, int c)
+        {
+            if (r < 0 || c < 0 || r >= Rows || c >= Cols) return false;
+            if (_cells[r, c].HasValue == false) return false;
+            _cells[r, c] = true;
             return true;
         }
 
-        public IReadOnlyList<Move> GetAllValidMoves()
+        private void PlaceFirstAvailablePeg()
         {
-            var moves = new List<Move>();
             for (int r = 0; r < Rows; r++)
                 for (int c = 0; c < Cols; c++)
-                {
-                    if (_cells[r, c] != true) continue;
+                    if (_cells[r, c].HasValue)
+                    {
+                        _cells[r, c] = true;
+                        return;
+                    }
+        }
 
-                    TryAddMove(moves, r, c, r - 2, c);
-                    TryAddMove(moves, r, c, r + 2, c);
-                    TryAddMove(moves, r, c, r, c - 2);
-                    TryAddMove(moves, r, c, r, c + 2);
-                }
-            return moves;
+        private void EnsureExactlyNPegs(int target)
+        {
+            if (target < 1) target = 1;
 
-            void TryAddMove(List<Move> list, int fr, int fc, int tr, int tc)
+            // Count current pegs
+            int current = PegCount();
+
+            // If too few, add pegs anywhere playable
+            while (current < target)
             {
-                if (!IsInside(tr, tc)) return;
-                var mv = new Move(fr, fc, tr, tc);
-                if (_cells[fr, fc] == true && _cells[tr, tc] == false && _cells[mv.MidRow, mv.MidCol] == true)
-                    list.Add(mv);
+                bool added = false;
+                for (int r = 0; r < Rows && !added; r++)
+                    for (int c = 0; c < Cols && !added; c++)
+                    {
+                        if (_cells[r, c].HasValue && _cells[r, c] == false)
+                        {
+                            _cells[r, c] = true;
+                            current++;
+                            added = true;
+                        }
+                    }
+                if (!added) break; // no space
+            }
+
+            // If too many, remove pegs from bottom-right
+            while (current > target)
+            {
+                bool removed = false;
+                for (int r = Rows - 1; r >= 0 && !removed; r--)
+                    for (int c = Cols - 1; c >= 0 && !removed; c--)
+                    {
+                        if (_cells[r, c] == true)
+                        {
+                            _cells[r, c] = false;
+                            current--;
+                            removed = true;
+                        }
+                    }
+                if (!removed) break;
             }
         }
+
+        // ----- existing game logic -----
 
         public int PegCount()
         {
@@ -101,28 +142,81 @@ namespace SolitaireSprint0
             return count;
         }
 
-        private void RecomputeGameOver()
+        public bool TryApplyMove(Move m)
         {
-            int pegs = PegCount();
-            Won = (pegs == 1);
-            bool hasMoves = GetAllValidMoves().Count > 0;
-            GameOver = Won || !hasMoves;
+            if (Status != GameStatus.InProgress) return false;
+            if (!IsPlayable(m.FromRow, m.FromCol) || !IsPlayable(m.ToRow, m.ToCol)) return false;
+
+            if (_cells[m.FromRow, m.FromCol] != true) return false;
+            if (_cells[m.ToRow, m.ToCol] != false) return false;
+
+            int dr = m.ToRow - m.FromRow;
+            int dc = m.ToCol - m.FromCol;
+
+            bool orthJump = (Math.Abs(dr) == 2 && dc == 0) || (Math.Abs(dc) == 2 && dr == 0);
+            if (!orthJump) return false;
+
+            if (!IsPlayable(m.MidRow, m.MidCol)) return false;
+            if (_cells[m.MidRow, m.MidCol] != true) return false;
+
+            // apply
+            _cells[m.FromRow, m.FromCol] = false;
+            _cells[m.MidRow, m.MidCol] = false;
+            _cells[m.ToRow, m.ToCol] = true;
+
+            RecomputeStatus();
+            return true;
         }
 
-        private bool IsInside(int r, int c)
+        public IReadOnlyList<Move> GetAllValidMoves()
+        {
+            var moves = new List<Move>();
+
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                {
+                    if (_cells[r, c] != true) continue;
+
+                    TryAdd(r, c, r - 2, c);
+                    TryAdd(r, c, r + 2, c);
+                    TryAdd(r, c, r, c - 2);
+                    TryAdd(r, c, r, c + 2);
+                }
+
+            return moves;
+
+            void TryAdd(int fr, int fc, int tr, int tc)
+            {
+                if (!IsPlayable(tr, tc)) return;
+                var mv = new Move(fr, fc, tr, tc);
+                if (_cells[tr, tc] == false && IsPlayable(mv.MidRow, mv.MidCol) && _cells[mv.MidRow, mv.MidCol] == true)
+                    moves.Add(mv);
+            }
+        }
+
+        private void RecomputeStatus()
+        {
+            if (PegCount() == 1)
+            {
+                Status = GameStatus.Won;
+                return;
+            }
+
+            Status = GetAllValidMoves().Count > 0 ? GameStatus.InProgress : GameStatus.NoMovesLeft;
+        }
+
+        private bool IsPlayable(int r, int c)
         {
             if (r < 0 || c < 0 || r >= Rows || c >= Cols) return false;
-            return _cells[r, c].HasValue; // part of board
+            return _cells[r, c].HasValue;
         }
 
-        private (int r, int c) FindCenterHole()
+        private (int r, int c) FindCenterPlayable()
         {
-            // pick the nearest valid cell to geometric center
             int cr = Rows / 2;
             int cc = Cols / 2;
             if (_cells[cr, cc].HasValue) return (cr, cc);
 
-            // search outward
             for (int dist = 1; dist < Math.Max(Rows, Cols); dist++)
                 for (int r = cr - dist; r <= cr + dist; r++)
                     for (int c = cc - dist; c <= cc + dist; c++)
@@ -132,36 +226,29 @@ namespace SolitaireSprint0
             return (0, 0);
         }
 
-        // ---------- Board builders ----------
-
-        // English cross: size is arm thickness (commonly 7 board => size=7)
-        // We'll interpret size as full grid dimension (odd recommended). If even, still works.
-        private static bool?[,] BuildEnglish(int size)
+        // English cross
+        private static bool?[,] BuildEnglish(int n)
         {
-            int n = size;
             var cells = new bool?[n, n];
 
-            int third = n / 3;               // roughly
-            int start = third;
-            int end = n - third - 1;
+            int band = n / 3;
+            int start = band;
+            int end = n - band - 1;
 
             for (int r = 0; r < n; r++)
                 for (int c = 0; c < n; c++)
                 {
                     bool inCross = (r >= start && r <= end) || (c >= start && c <= end);
-                    // corners removed: if both r and c are in corner bands
                     bool inCorner = (r < start || r > end) && (c < start || c > end);
-                    if (inCross && !inCorner) cells[r, c] = true;
-                    else cells[r, c] = null;
+                    cells[r, c] = (inCross && !inCorner) ? true : null;
                 }
 
             return cells;
         }
 
-        // Diamond: size = width/height (odd recommended)
-        private static bool?[,] BuildDiamond(int size)
+        // Diamond mask
+        private static bool?[,] BuildDiamond(int n)
         {
-            int n = size;
             var cells = new bool?[n, n];
             int center = n / 2;
 
@@ -169,18 +256,15 @@ namespace SolitaireSprint0
                 for (int c = 0; c < n; c++)
                 {
                     int dist = Math.Abs(r - center) + Math.Abs(c - center);
-                    if (dist <= center) cells[r, c] = true;
-                    else cells[r, c] = null;
+                    cells[r, c] = dist <= center ? true : null;
                 }
 
             return cells;
         }
 
-        // Hexagon-ish on a square grid: size = radius (>=3 recommended)
-        // We'll map into a (2*size-1) square with a hex mask.
-        private static bool?[,] BuildHexagon(int size)
+        // Hexagon mask on square grid (radius-based)
+        private static bool?[,] BuildHexagonRadius(int radius)
         {
-            int radius = size;
             int n = 2 * radius - 1;
             var cells = new bool?[n, n];
             int center = n / 2;
@@ -188,12 +272,15 @@ namespace SolitaireSprint0
             for (int r = 0; r < n; r++)
                 for (int c = 0; c < n; c++)
                 {
-                    // cube coords distance on axial projected grid approximation:
                     int dr = r - center;
                     int dc = c - center;
-                    int dist = Math.Max(Math.Abs(dr), Math.Abs(dc)); // simple mask
-                    if (dist <= center) cells[r, c] = true;
-                    else cells[r, c] = null;
+
+                    int x = dc;
+                    int z = dr;
+                    int y = -x - z;
+                    int dist = Math.Max(Math.Abs(x), Math.Max(Math.Abs(y), Math.Abs(z)));
+
+                    cells[r, c] = dist <= center ? true : null;
                 }
 
             return cells;

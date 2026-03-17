@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -13,31 +14,34 @@ namespace SolitaireSprint0
         {
             InitializeComponent();
 
+            cmbSize.ItemsSource = new[] { 7, 9 };
+            cmbSize.SelectedIndex = 0;
+
             cmbType.ItemsSource = new[] { BoardType.English, BoardType.Hexagon, BoardType.Diamond };
             cmbType.SelectedIndex = 0;
 
-            // simple size options (you can change later)
-            cmbSize.ItemsSource = new[] { 7, 9, 11 };
-            cmbSize.SelectedIndex = 0;
-
             StartNewGame();
         }
 
-        private void NewGame_Click(object sender, RoutedEventArgs e)
-        {
-            StartNewGame();
-        }
+        private void NewGame_Click(object sender, RoutedEventArgs e) => StartNewGame();
 
         private void StartNewGame()
         {
             _selected = null;
 
+            int uiSize = (int)cmbSize.SelectedItem!;
             var type = (BoardType)cmbType.SelectedItem!;
-            int size = (int)cmbSize.SelectedItem!;
 
-            _game.NewGame(type, size);
+            // Hexagon uses radius; keep UI simple
+            int gameSize = (type == BoardType.Hexagon) ? (uiSize + 1) / 2 : uiSize;
+
+            _game.NewGame(type, gameSize);
+
+            // ✅ Start with ONLY 5 pegs (fast demo)
+            _game.SetupDemoStartWith5Pegs();
+
             RenderBoard();
-            UpdateStatus();
+            UpdateStatus("Demo start: 5 pegs. Pick a peg to move.");
         }
 
         private void RenderBoard()
@@ -53,7 +57,6 @@ namespace SolitaireSprint0
 
                     if (!cell.HasValue)
                     {
-                        // Not part of board
                         boardGrid.Children.Add(new Border { Background = Brushes.Transparent });
                         continue;
                     }
@@ -67,9 +70,80 @@ namespace SolitaireSprint0
                         Background = cell.Value ? Brushes.DodgerBlue : Brushes.LightGray,
                         Content = cell.Value ? "●" : ""
                     };
+
                     btn.Click += Cell_Click;
                     boardGrid.Children.Add(btn);
                 }
+        }
+
+        private Button? GetButtonAt(int r, int c)
+        {
+            foreach (var child in boardGrid.Children)
+            {
+                if (child is Button b && b.Tag is ValueTuple<int, int> t)
+                {
+                    var (br, bc) = t;
+                    if (br == r && bc == c) return b;
+                }
+            }
+            return null;
+        }
+
+        private void ClearHighlights()
+        {
+            foreach (var child in boardGrid.Children)
+            {
+                if (child is Button b && b.Tag is ValueTuple<int, int> t)
+                {
+                    var (r, c) = t;
+                    bool? cell = _game.GetCell(r, c);
+                    if (cell.HasValue)
+                        b.Background = cell.Value ? Brushes.DodgerBlue : Brushes.LightGray;
+                }
+            }
+        }
+
+        private int CountValidDestinations(int sr, int sc)
+        {
+            int count = 0;
+            int[,] dirs = { { -2, 0 }, { 2, 0 }, { 0, -2 }, { 0, 2 } };
+
+            for (int i = 0; i < dirs.GetLength(0); i++)
+            {
+                int tr = sr + dirs[i, 0];
+                int tc = sc + dirs[i, 1];
+                if (tr < 0 || tc < 0 || tr >= _game.Rows || tc >= _game.Cols) continue;
+
+                var mv = new Move(sr, sc, tr, tc);
+                bool? dest = _game.GetCell(tr, tc);
+                bool? mid = _game.GetCell(mv.MidRow, mv.MidCol);
+
+                if (dest == false && mid == true) count++;
+            }
+
+            return count;
+        }
+
+        private void HighlightValidDestinations(int sr, int sc)
+        {
+            int[,] dirs = { { -2, 0 }, { 2, 0 }, { 0, -2 }, { 0, 2 } };
+
+            for (int i = 0; i < dirs.GetLength(0); i++)
+            {
+                int tr = sr + dirs[i, 0];
+                int tc = sc + dirs[i, 1];
+                if (tr < 0 || tc < 0 || tr >= _game.Rows || tc >= _game.Cols) continue;
+
+                var mv = new Move(sr, sc, tr, tc);
+                bool? dest = _game.GetCell(tr, tc);
+                bool? mid = _game.GetCell(mv.MidRow, mv.MidCol);
+
+                if (dest == false && mid == true)
+                {
+                    var destBtn = GetButtonAt(tr, tc);
+                    if (destBtn != null) destBtn.Background = Brushes.LightGreen;
+                }
+            }
         }
 
         private void Cell_Click(object sender, RoutedEventArgs e)
@@ -82,40 +156,41 @@ namespace SolitaireSprint0
 
             if (_selected is null)
             {
-                // select a peg only
-                if (cell.Value == true)
+                if (cell.Value != true)
                 {
-                    _selected = (r, c);
-                    UpdateStatus($"Selected: ({r},{c})");
+                    UpdateStatus("Pick a peg (blue circle) to move.");
+                    return;
                 }
+
+                _selected = (r, c);
+                ClearHighlights();
+                btn.Background = Brushes.LightBlue;
+                HighlightValidDestinations(r, c);
+
+                int moves = CountValidDestinations(r, c);
+                UpdateStatus(moves == 0
+                    ? "Selected a peg, but it has no moves. Select a different peg."
+                    : $"Selected a peg. {moves} move(s) available — click a GREEN hole.");
+
                 return;
             }
 
-            // second click = try move to destination
             var (sr, sc) = _selected.Value;
-            if (sr == r && sc == c)
-            {
-                _selected = null;
-                UpdateStatus();
-                return;
-            }
+            _selected = null;
 
             bool moved = _game.TryApplyMove(new Move(sr, sc, r, c));
-            _selected = null;
+
+            ClearHighlights();
             RenderBoard();
-            UpdateStatus(moved ? "Move applied." : "Invalid move.");
+
+            UpdateStatus(moved
+                ? "Move completed — one peg removed."
+                : "That move isn’t allowed. Select a peg, then click a GREEN hole.");
         }
 
-        private void UpdateStatus(string? extra = null)
+        private void UpdateStatus(string msg)
         {
-            string baseText = $"Pegs: {_game.PegCount()}";
-            if (_game.GameOver)
-                baseText += _game.Won ? " | YOU WIN" : " | GAME OVER";
-
-            if (!string.IsNullOrWhiteSpace(extra))
-                baseText += $" | {extra}";
-
-            txtStatus.Text = baseText;
+            txtStatus.Text = $"Pegs: {_game.PegCount()} | Status: {_game.Status} | {msg}";
         }
     }
 }
