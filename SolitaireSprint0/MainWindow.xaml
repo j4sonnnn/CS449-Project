@@ -1,19 +1,29 @@
 ﻿<Window x:Class="SolitaireSprint0.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Solitaire Sprint 2" Height="560" Width="560">
+        Title="Solitaire Sprint 3" Height="650" Width="750">
     <DockPanel Margin="12">
 
         <Border DockPanel.Dock="Top" BorderBrush="Gray" BorderThickness="1" Padding="10" Margin="0,0,0,10">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Size:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <ComboBox x:Name="cmbSize" Width="80" Margin="0,0,14,0"/>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                <ComboBox x:Name="cmbType" Width="120" Margin="0,0,14,0"/>
+                <StackPanel Margin="0,0,15,0" VerticalAlignment="Center">
+                    <TextBlock Text="Mode:" FontWeight="Bold"/>
+                    <RadioButton x:Name="rbManual" Content="Manual" IsChecked="True"/>
+                    <RadioButton x:Name="rbAutomated" Content="Automated"/>
+                </StackPanel>
 
-                <Button Content="New Game" Width="110" Click="NewGame_Click" Margin="0,0,14,0"/>
-                <TextBlock x:Name="txtStatus" VerticalAlignment="Center"/>
+                <TextBlock Text="Size:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <ComboBox x:Name="cmbSize" Width="60" Height="25" Margin="0,0,15,0"/>
+
+                <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                <ComboBox x:Name="cmbType" Width="90" Height="25" Margin="0,0,15,0"/>
+
+                <Button Content="New Game" Width="80" Height="30" Click="NewGame_Click" Margin="0,0,10,0"/>
+                <Button Content="Autoplay" Width="80" Height="30" Click="Autoplay_Click" Background="LightGreen" Margin="0,0,10,0"/>
+                <Button Content="Randomize" Width="80" Height="30" Click="Randomize_Click" Background="LightSkyBlue" Margin="0,0,15,0"/>
+
+                <TextBlock x:Name="txtStatus" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="200"/>
             </StackPanel>
         </Border>
 
