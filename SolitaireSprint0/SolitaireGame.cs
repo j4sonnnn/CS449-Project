@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace SolitaireSprint0
 {
@@ -11,6 +12,9 @@ namespace SolitaireSprint0
         public int Rows => _cells.GetLength(0);
         public int Cols => _cells.GetLength(1);
         public GameStatus Status { get; protected set; } = GameStatus.InProgress;
+
+        // NEW SPRINT 4: List to store board snapshots for recording
+        public List<string> GameHistory { get; private set; } = new();
 
         public bool? GetCell(int r, int c) => _cells[r, c];
 
@@ -30,6 +34,39 @@ namespace SolitaireSprint0
 
             var (cr, cc) = FindCenterPlayable();
             _cells[cr, cc] = false;
+
+            // Reset history and record initial state
+            GameHistory.Clear();
+            RecordCurrentState();
+            RecomputeStatus();
+        }
+
+        // NEW SPRINT 4: Serializes the board into a string snapshot
+        public void RecordCurrentState()
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                {
+                    if (_cells[r, c] == null) sb.Append('N');
+                    else if (_cells[r, c] == true) sb.Append('1');
+                    else sb.Append('0');
+                }
+            GameHistory.Add(sb.ToString());
+        }
+
+        // NEW SPRINT 4: Restores the board from a string snapshot
+        public void LoadState(string state)
+        {
+            int index = 0;
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                {
+                    char val = state[index++];
+                    if (val == 'N') _cells[r, c] = null;
+                    else if (val == '1') _cells[r, c] = true;
+                    else _cells[r, c] = false;
+                }
             RecomputeStatus();
         }
 
@@ -38,8 +75,10 @@ namespace SolitaireSprint0
             Random rng = new Random();
             for (int r = 0; r < Rows; r++)
                 for (int c = 0; c < Cols; c++)
-                    if (_cells[r, c].HasValue)
+                    if (_cells[r, r] != null && _cells[r, c].HasValue)
                         _cells[r, c] = rng.Next(2) == 0;
+
+            RecordCurrentState(); // Record state change
             RecomputeStatus();
         }
 
@@ -107,6 +146,9 @@ namespace SolitaireSprint0
 
             if (!TryPlacePeg(cr + 2, cc)) PlaceFirstAvailablePeg();
             EnsureExactlyNPegs(10);
+
+            GameHistory.Clear();
+            RecordCurrentState();
             RecomputeStatus();
         }
 
